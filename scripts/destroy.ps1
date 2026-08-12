@@ -4,8 +4,6 @@ param(
     [string]$ProjectName = "twin"
 )
 
-$ErrorActionPreference = "Stop"
-
 # Validate environment parameter
 if ($Environment -notmatch '^(dev|test|prod)$') {
     Write-Host "Error: Invalid environment '$Environment'" -ForegroundColor Red
@@ -15,19 +13,21 @@ if ($Environment -notmatch '^(dev|test|prod)$') {
 
 Write-Host "Preparing to destroy $ProjectName-$Environment infrastructure..." -ForegroundColor Yellow
 
-$projectRoot = Split-Path $PSScriptRoot -Parent
-
-# Ensure Lambda deployment package exists for Terraform plan evaluation
-$zipPath = Join-Path $projectRoot "backend\lambda-deployment.zip"
-if (-not (Test-Path $zipPath)) {
-    Write-Host "Lambda deployment package not found. Building..." -ForegroundColor Yellow
-    Set-Location (Join-Path $projectRoot "backend")
-    uv run deploy.py
-    Set-Location $projectRoot
-}
-
 # Navigate to terraform directory
-Set-Location (Join-Path $projectRoot "terraform")
+Set-Location (Join-Path (Split-Path $PSScriptRoot -Parent) "terraform")
+
+# Get AWS Account ID for backend configuration
+$awsAccountId = aws sts get-caller-identity --query Account --output text
+$awsRegion = if ($env:DEFAULT_AWS_REGION) { $env:DEFAULT_AWS_REGION } else { "us-east-2" }
+
+# Initialize terraform with S3 backend
+Write-Host "Initializing Terraform with S3 backend..." -ForegroundColor Yellow
+terraform init -input=false `
+  -backend-config="bucket=twin-terraform-state-$awsAccountId" `
+  -backend-config="key=$Environment/terraform.tfstate" `
+  -backend-config="region=$awsRegion" `
+  -backend-config="dynamodb_table=twin-terraform-locks" `
+  -backend-config="encrypt=true"
 
 # Check if workspace exists
 $workspaces = terraform workspace list
@@ -43,10 +43,7 @@ terraform workspace select $Environment
 
 Write-Host "Emptying S3 buckets..." -ForegroundColor Yellow
 
-# Get AWS Account ID for bucket names
-$awsAccountId = aws sts get-caller-identity --query Account --output text
-
-# Define bucket names with account ID
+# Define bucket names with account ID (matching Day 4 naming)
 $FrontendBucket = "$ProjectName-$Environment-frontend-$awsAccountId"
 $MemoryBucket = "$ProjectName-$Environment-memory-$awsAccountId"
 
@@ -72,9 +69,14 @@ Write-Host "Running terraform destroy..." -ForegroundColor Yellow
 
 # Run terraform destroy with auto-approve
 if ($Environment -eq "prod" -and (Test-Path "prod.tfvars")) {
-    terraform destroy -var-file="prod.tfvars" -var="project_name=$ProjectName" -var="environment=$Environment" -auto-approve
+    terraform destroy -var-file=prod.tfvars `
+                     -var="project_name=$ProjectName" `
+                     -var="environment=$Environment" `
+                     -auto-approve
 } else {
-    terraform destroy -var="project_name=$ProjectName" -var="environment=$Environment" -auto-approve
+    terraform destroy -var="project_name=$ProjectName" `
+                     -var="environment=$Environment" `
+                     -auto-approve
 }
 
 Write-Host "Infrastructure for $Environment has been destroyed!" -ForegroundColor Green
