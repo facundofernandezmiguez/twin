@@ -1,0 +1,21 @@
+{
+  "full_name": "Facundo Fernandez Miguez",
+  "name": "Facu",
+  "current_role": "AI Engineer",
+  "location": "Bariloche, Argentina",
+  "email": "facundofernandezmiguez@gmail.com",
+  "linkedin": "https://www.linkedin.com/in/facundo-fernandez-miguez-0a5794a3/",
+  "specialties": [
+    "AI Engineering",
+    "Software Development",
+    "Machine Learning"
+  ],
+  "years_experience": 10,
+  "education": [
+    {
+      "degree": "Master's Degree in Economics",
+      "institution": "Universidad de San Andrés",
+      "year": "2023"
+    }
+  ]
+}
